@@ -15,10 +15,10 @@ QR kód s odkazem na stránku je v `assets/qr.png` a `assets/qr.svg`.
 
 ## Nasazení
 
-1. Pushněte repozitář na GitHub (větev `main`).
-2. Zapněte GitHub Pages z větve `main`, složka `/` (root):
-   ```sh
-   gh api -X POST repos/<uživatel>/qr-security-demo/pages \
-     -f "source[branch]=main" -f "source[path]=/"
-   ```
-3. Stránka poběží na `https://<uživatel>.github.io/qr-security-demo/`.
+Stránka je statická, stačí ji servírovat přes GitHub Pages:
+
+1. V repozitáři otevřete **Settings → Pages**.
+2. V části **Build and deployment** zvolte **Source: Deploy from a branch**, vyberte větev
+   s tímto souborem `index.html` a složku `/ (root)`, pak **Save**.
+3. Po 1–2 minutách stránka poběží na `https://<uživatel>.github.io/<repozitář>/`
+   (zde `https://tomasraketak.github.io/QRcodetest/`).
