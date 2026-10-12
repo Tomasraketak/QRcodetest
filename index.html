@@ -216,6 +216,13 @@
         return [ip.city, ip.region, ip.country].filter(Boolean).join(", ");
       }, NA);
       rows.push(["Přibližná poloha", place]);
+      rows.push(["Přibližné souřadnice", safe(function () {
+        var lat = Number(ip.latitude), lon = Number(ip.longitude);
+        if (!isFinite(lat) || !isFinite(lon) || (lat === 0 && lon === 0)) return null;
+        function f(n) { return Math.abs(n).toFixed(4).replace(".", ","); }
+        return f(lat) + "° " + (lat >= 0 ? "s. š." : "j. š.") + ", " +
+          f(lon) + "° " + (lon >= 0 ? "v. d." : "z. d.") + " (přesnost zhruba na město)";
+      }, NA)]);
       rows.push(["Poskytovatel připojení", safe(function () {
         return ip.connection.isp || ip.connection.org;
       }, NA)]);
@@ -261,6 +268,17 @@
       }, NA)]);
       rows.push(["Časové pásmo", safe(function () {
         return Intl.DateTimeFormat().resolvedOptions().timeZone;
+      }, NA)]);
+      rows.push(["Místní čas na zařízení", safe(function () {
+        var d = new Date();
+        var off = -d.getTimezoneOffset();
+        var sign = off >= 0 ? "+" : "-";
+        off = Math.abs(off);
+        var utc = "UTC" + sign + Math.floor(off / 60) + (off % 60 ? ":" + ("0" + off % 60).slice(-2) : "");
+        return d.toLocaleString("cs-CZ", {
+          weekday: "long", day: "numeric", month: "numeric", year: "numeric",
+          hour: "2-digit", minute: "2-digit", second: "2-digit"
+        }) + " (" + utc + ")";
       }, NA)]);
 
       // Připojení
