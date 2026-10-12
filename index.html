@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://ipwho.is; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Tohle o vás vím</title>
+<style>
+  :root {
+    --bg: #000;
+    --fg: #33ff66;
+    --accent: #00e5ff;
+    --muted: #7a8f80;
+    --warn: #ff4d6d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 17px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 16px 40px;
+  }
+  h1 {
+    color: #fff;
+    font-size: clamp(1.7rem, 7vw, 3rem);
+    line-height: 1.15;
+    margin: 0 0 20px;
+    text-shadow: 0 0 12px rgba(51, 255, 102, .45);
+  }
+  h1 span { color: var(--fg); display: block; }
+  h2 {
+    color: var(--warn);
+    font-size: clamp(1.2rem, 5vw, 1.7rem);
+    margin: 36px 0 12px;
+  }
+  #out {
+    border: 1px solid #1d3a24;
+    background: #050a06;
+    border-radius: 8px;
+    padding: 14px;
+    min-height: 3em;
+  }
+  .row {
+    margin: 0 0 8px;
+    overflow-wrap: anywhere;
+  }
+  .row .k { color: var(--accent); }
+  .row .v { color: var(--fg); font-weight: bold; }
+  .prompt { color: var(--muted); }
+  .cursor {
+    display: inline-block;
+    width: .6em;
+    background: var(--fg);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  #after { display: none; }
+  #after.show { display: block; }
+  p { margin: 0 0 12px; overflow-wrap: anywhere; }
+  .bad { color: #fff; }
+  ol { padding-left: 1.4em; margin: 0; }
+  ol li { margin: 0 0 12px; color: #fff; }
+  ol li strong { color: var(--accent); }
+  footer {
+    margin-top: 36px;
+    padding-top: 14px;
+    border-top: 1px solid #1d3a24;
+    color: var(--muted);
+    font-size: .85rem;
+  }
+  footer a { color: var(--accent); }
+  @media (min-width: 900px) {
+    html, body { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tohle o vás vím.<span>A nic jste neklikli.</span></h1>
+
+  <div id="out" aria-live="polite">
+    <div class="row prompt" id="status">&gt; skenuji zařízení <span class="cursor">&nbsp;</span></div>
+  </div>
+
+  <section id="after">
+    <h2>Co by se stalo, kdyby tohle nebyl test</h2>
+    <p class="bad">Stačilo načíst QR kód. Zlý kód by mohl místo tohohle výpisu otevřít
+      <strong>falešné přihlášení k vaší bance</strong>, nabídnout ke stažení
+      <strong>škodlivou aplikaci</strong> nebo rovnou <strong>spustit platbu</strong>.</p>
+    <p>Jak se bránit:</p>
+    <ol>
+      <li><strong>Před otevřením si přečtěte adresu</strong>, kterou telefon po naskenování zobrazí.</li>
+      <li><strong>Nenačítejte kódy z nálepek přilepených přes jiné kódy</strong> (parkovací automaty, plakáty).</li>
+      <li><strong>Po skenu nikdy nezadávejte hesla ani platební údaje.</strong></li>
+    </ol>
+  </section>
+
+  <footer>
+    <p>Edukativní ukázka. Nic z těchto údajů se neukládá ani neodesílá na žádný můj server.</p>
+    <p>Zjištění IP adresy a přibližné polohy probíhá přímo z vašeho prohlížeče přes veřejnou službu
+      <a href="https://ipwho.is/" rel="noopener noreferrer">ipwho.is</a>.</p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var NA = "nezjištěno";
+  var LINE_DELAY = 300;
+
+  function safe(fn, fallback) {
+    try {
+      var v = fn();
+      return (v === undefined || v === null || v === "") ? fallback : v;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; resolve(null); } }, ms);
+      Promise.resolve(promise).then(function (v) {
+        if (!done) { done = true; clearTimeout(t); resolve(v); }
+      }, function () {
+        if (!done) { done = true; clearTimeout(t); resolve(null); }
+      });
+    });
+  }
+
+  function getIpInfo() {
+    if (!window.fetch) return Promise.resolve(null);
+    return withTimeout(
+      fetch("https://ipwho.is/", { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { return (d && d.success !== false) ? d : null; }),
+      6000
+    );
+  }
+
+  function parseOS(ua) {
+    var m;
+    if (/Windows NT 10/.test(ua)) return "Windows 10/11";
+    if ((m = ua.match(/Windows NT ([\d.]+)/))) return "Windows NT " + m[1];
+    if ((m = ua.match(/Android ([\d.]+)/))) return "Android " + m[1];
+    if (/Android/.test(ua)) return "Android";
+    if ((m = ua.match(/(?:iPhone|iPad|iPod).*? OS ([\d_]+)/))) {
+      return (/iPad/.test(ua) ? "iPadOS " : "iOS ") + m[1].replace(/_/g, ".");
+    }
+    if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return "iPadOS";
+    if ((m = ua.match(/Mac OS X ([\d_.]+)/))) return "macOS " + m[1].replace(/_/g, ".");
+    if (/CrOS/.test(ua)) return "ChromeOS";
+    if (/Linux/.test(ua)) return "Linux";
+    return NA;
+  }
+
+  function parseBrowser(ua) {
+    var rules = [
+      [/EdgA?\/([\d.]+)/, "Microsoft Edge"],
+      [/EdgiOS\/([\d.]+)/, "Microsoft Edge"],
+      [/OPR\/([\d.]+)/, "Opera"],
+      [/SamsungBrowser\/([\d.]+)/, "Samsung Internet"],
+      [/FxiOS\/([\d.]+)/, "Firefox"],
+      [/Firefox\/([\d.]+)/, "Firefox"],
+      [/CriOS\/([\d.]+)/, "Chrome"],
+      [/Chrome\/([\d.]+)/, "Chrome"],
+      [/Version\/([\d.]+).*Safari/, "Safari"]
+    ];
+    for (var i = 0; i < rules.length; i++) {
+      var m = ua.match(rules[i][0]);
+      if (m) return rules[i][1] + " " + m[1].split(".")[0];
+    }
+    return NA;
+  }
+
+  function parseDevice(ua) {
+    var uad = navigator.userAgentData;
+    if (/iPad|Tablet/.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua)) ||
+        (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "tablet";
+    if ((uad && uad.mobile) || /Mobi|iPhone|iPod|Android/.test(ua)) return "mobilní telefon";
+    return "počítač";
+  }
+
+  function getHighEntropy() {
+    var uad = navigator.userAgentData;
+    if (!uad || typeof uad.getHighEntropyValues !== "function") return Promise.resolve(null);
+    return withTimeout(uad.getHighEntropyValues(["platform", "platformVersion", "model", "fullVersionList"]), 1500);
+  }
+
+  function getBattery() {
+    if (typeof navigator.getBattery !== "function") return Promise.resolve(null);
+    return withTimeout(navigator.getBattery(), 1500);
+  }
+
+  function collect() {
+    return Promise.all([getIpInfo(), getHighEntropy(), getBattery()]).then(function (res) {
+      var ip = res[0], he = res[1], bat = res[2];
+      var ua = safe(function () { return navigator.userAgent; }, "");
+      var rows = [];
+
+      // IP + poloha
+      rows.push(["Veřejná IP adresa", safe(function () { return ip.ip; }, NA)]);
+      var place = safe(function () {
+        return [ip.city, ip.region, ip.country].filter(Boolean).join(", ");
+      }, NA);
+      rows.push(["Přibližná poloha", place]);
+      rows.push(["Poskytovatel připojení", safe(function () {
+        return ip.connection.isp || ip.connection.org;
+      }, NA)]);
+
+      // Systém, prohlížeč, zařízení
+      var os = parseOS(ua);
+      if (he && he.platform) {
+        var ver = he.platformVersion ? " " + he.platformVersion : "";
+        if (he.platform === "Windows" && he.platformVersion) {
+          var major = parseInt(he.platformVersion.split(".")[0], 10);
+          os = major >= 13 ? "Windows 11" : (major > 0 ? "Windows 10" : os);
+        } else if (he.platform !== "Unknown") {
+          os = he.platform + ver;
+        }
+      }
+      rows.push(["Operační systém", os]);
+
+      var browser = parseBrowser(ua);
+      if (he && he.fullVersionList && he.fullVersionList.length) {
+        var brand = he.fullVersionList.filter(function (b) {
+          return !/Not.?A.?Brand|Chromium/i.test(b.brand);
+        })[0];
+        if (brand) browser = brand.brand + " " + String(brand.version).split(".")[0];
+      }
+      rows.push(["Prohlížeč", browser]);
+
+      var device = parseDevice(ua);
+      if (he && he.model) device += " (" + he.model + ")";
+      rows.push(["Typ zařízení", device]);
+
+      // Displej
+      rows.push(["Rozlišení displeje", safe(function () {
+        return screen.width + " × " + screen.height + " px";
+      }, NA)]);
+      rows.push(["Pixel ratio", safe(function () {
+        return String(Math.round(window.devicePixelRatio * 100) / 100);
+      }, NA)]);
+
+      // Jazyk, čas
+      rows.push(["Jazyk prohlížeče", safe(function () {
+        return (navigator.languages && navigator.languages.length)
+          ? navigator.languages.join(", ") : navigator.language;
+      }, NA)]);
+      rows.push(["Časové pásmo", safe(function () {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone;
+      }, NA)]);
+
+      // Připojení
+      rows.push(["Typ připojení", safe(function () {
+        var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (!c) return null;
+        var parts = [];
+        if (c.type && c.type !== "unknown") parts.push(c.type);
+        if (c.effectiveType) parts.push("kvalita " + c.effectiveType);
+        if (c.downlink) parts.push("~" + c.downlink + " Mb/s");
+        if (c.rtt) parts.push("odezva ~" + c.rtt + " ms");
+        if (c.saveData) parts.push("úsporný režim");
+        return parts.join(", ");
+      }, NA)]);
+
+      // Baterie (jen pokud je dostupná)
+      if (bat && typeof bat.level === "number") {
+        var b = Math.round(bat.level * 100) + " %";
+        b += bat.charging ? ", nabíjí se" : ", nenabíjí se";
+        rows.push(["Stav baterie", b]);
+      }
+
+      // Hardware
+      rows.push(["Jádra procesoru", safe(function () {
+        return navigator.hardwareConcurrency ? String(navigator.hardwareConcurrency) : null;
+      }, NA)]);
+      rows.push(["Odhad paměti", safe(function () {
+        return navigator.deviceMemory ? "≥ " + navigator.deviceMemory + " GB" : null;
+      }, NA)]);
+
+      return rows;
+    });
+  }
+
+  function typeText(el, text, ms) {
+    return new Promise(function (resolve) {
+      var i = 0;
+      var step = Math.max(8, Math.floor(ms / Math.max(1, text.length)));
+      (function tick() {
+        i++;
+        el.textContent = text.slice(0, i);
+        if (i < text.length) setTimeout(tick, step); else resolve();
+      })();
+    });
+  }
+
+  function render(rows) {
+    var out = document.getElementById("out");
+    var status = document.getElementById("status");
+    if (status) status.parentNode.removeChild(status);
+
+    var cursor = document.createElement("span");
+    cursor.className = "cursor";
+    cursor.innerHTML = "&nbsp;";
+
+    var chain = Promise.resolve();
+    rows.forEach(function (r) {
+      chain = chain.then(function () {
+        var row = document.createElement("div");
+        row.className = "row";
+        var k = document.createElement("span");
+        k.className = "k";
+        k.textContent = "> " + r[0] + ": ";
+        var v = document.createElement("span");
+        v.className = "v";
+        row.appendChild(k);
+        row.appendChild(v);
+        row.appendChild(cursor);
+        out.appendChild(row);
+        return typeText(v, String(r[1]), LINE_DELAY);
+      });
+    });
+    return chain.then(function () {
+      if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+    });
+  }
+
+  function showAfter() {
+    var a = document.getElementById("after");
+    if (a) a.className = "show";
+  }
+
+  try {
+    collect()
+      .then(render)
+      .catch(function () {})
+      .then(showAfter);
+  } catch (e) {
+    showAfter();
+  }
+})();
+</script>
+</body>
+</html>
